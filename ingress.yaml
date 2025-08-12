@@ -1,0 +1,72 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: afrofuturistic-research-ingress
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  tls:
+  - hosts:
+    - afrofuturistic-research.cloud
+    - jupyter.afrofuturistic-research.cloud
+    secretName: afrofuturistic-tls
+  rules:
+  - host: afrofuturistic-research.cloud
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: afrofuturistic-research-service
+            port:
+              number: 80
+      - path: /jupyter(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: afrofuturistic-jupyter-service
+            port:
+              number: 8888
+      - path: /gpu-compute(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: afrofuturistic-gpu-service
+            port:
+              number: 8889
+  - host: jupyter.afrofuturistic-research.cloud
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: afrofuturistic-jupyter-service
+            port:
+              number: 8888
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-ingress-controller
+  labels:
+    app: nginx-ingress
+spec:
+  type: LoadBalancer
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+  - name: https
+    port: 443
+    targetPort: 443
+  selector:
+    app: nginx-ingress

@@ -1,0 +1,157 @@
+apiVersion: v1
+kind: ServiceMonitor
+metadata:
+  name: afrofuturistic-research-metrics
+  labels:
+    app: afrofuturistic-research
+spec:
+  selector:
+    matchLabels:
+      app: afrofuturistic-research
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: afrofuturistic-research-metrics
+  labels:
+    app: afrofuturistic-research
+spec:
+  ports:
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+  selector:
+    app: afrofuturistic-research
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus-afrofuturistic
+  labels:
+    app: prometheus-afrofuturistic
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus-afrofuturistic
+  template:
+    metadata:
+      labels:
+        app: prometheus-afrofuturistic
+    spec:
+      containers:
+      - name: prometheus
+        image: prom/prometheus:latest
+        ports:
+        - containerPort: 9090
+        volumeMounts:
+        - name: prometheus-config
+          mountPath: /etc/prometheus/
+        - name: prometheus-storage
+          mountPath: /prometheus/
+        command:
+        - /bin/prometheus
+        args:
+        - --config.file=/etc/prometheus/prometheus.yml
+        - --storage.tsdb.path=/prometheus/
+        - --web.console.libraries=/etc/prometheus/console_libraries
+        - --web.console.templates=/etc/prometheus/consoles
+        - --web.enable-lifecycle
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+      volumes:
+      - name: prometheus-config
+        configMap:
+          name: prometheus-config
+      - name: prometheus-storage
+        persistentVolumeClaim:
+          claimName: prometheus-storage-pvc
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+    
+    rule_files:
+      - "afrofuturistic_rules.yml"
+    
+    scrape_configs:
+      - job_name: 'afrofuturistic-research'
+        static_configs:
+          - targets: ['afrofuturistic-research-service:80']
+        metrics_path: /metrics
+        scrape_interval: 30s
+        
+      - job_name: 'jupyter-notebooks'
+        static_configs:
+          - targets: ['afrofuturistic-jupyter-service:8888']
+        metrics_path: /metrics
+        scrape_interval: 60s
+        
+      - job_name: 'gpu-compute'
+        static_configs:
+          - targets: ['afrofuturistic-gpu-service:8889']
+        metrics_path: /metrics
+        scrape_interval: 30s
+    
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets:
+              - alertmanager:9093
+  
+  afrofuturistic_rules.yml: |
+    groups:
+    - name: afrofuturistic.rules
+      rules:
+      - alert: HighCPUUsage
+        expr: cpu_usage_percent > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is above 80% for more than 5 minutes"
+      
+      - alert: HighMemoryUsage
+        expr: memory_usage_percent > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is above 85% for more than 5 minutes"
+      
+      - alert: JupyterNotebookDown
+        expr: up{job="jupyter-notebooks"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Jupyter notebook service is down"
+          description: "Jupyter notebook service has been down for more than 1 minute"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-storage-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi

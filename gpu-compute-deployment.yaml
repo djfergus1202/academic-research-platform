@@ -1,0 +1,128 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: afrofuturistic-gpu-compute
+  labels:
+    app: afrofuturistic-gpu
+    component: molecular-docking
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: afrofuturistic-gpu
+      component: molecular-docking
+  template:
+    metadata:
+      labels:
+        app: afrofuturistic-gpu
+        component: molecular-docking
+    spec:
+      nodeSelector:
+        accelerator: nvidia-tesla-v100
+      containers:
+      - name: molecular-docking-compute
+        image: nvcr.io/nvidia/pytorch:21.12-py3
+        ports:
+        - containerPort: 8889
+        env:
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "all"
+        - name: NVIDIA_DRIVER_CAPABILITIES
+          value: "compute,utility"
+        - name: CUDA_VISIBLE_DEVICES
+          value: "0,1"
+        resources:
+          requests:
+            memory: "16Gi"
+            cpu: "8000m"
+            nvidia.com/gpu: 2
+          limits:
+            memory: "32Gi"
+            cpu: "16000m"
+            nvidia.com/gpu: 2
+        volumeMounts:
+        - name: molecular-data
+          mountPath: /workspace/data
+        - name: gpu-shared-memory
+          mountPath: /dev/shm
+        command:
+        - jupyter
+        - lab
+        args:
+        - --ip=0.0.0.0
+        - --port=8889
+        - --no-browser
+        - --allow-root
+        - --NotebookApp.token=''
+        - --NotebookApp.password=''
+      volumes:
+      - name: molecular-data
+        persistentVolumeClaim:
+          claimName: molecular-data-pvc
+      - name: gpu-shared-memory
+        emptyDir:
+          medium: Memory
+          sizeLimit: 8Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: afrofuturistic-gpu-service
+  labels:
+    app: afrofuturistic-gpu
+spec:
+  type: NodePort
+  ports:
+  - name: jupyter-gpu
+    port: 8889
+    targetPort: 8889
+    nodePort: 30889
+    protocol: TCP
+  selector:
+    app: afrofuturistic-gpu
+    component: molecular-docking
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: molecular-data-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: fast-ssd
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: afrofuturistic-data-prep
+spec:
+  template:
+    spec:
+      containers:
+      - name: data-preparation
+        image: python:3.11-slim
+        command:
+        - python
+        - -c
+        - |
+          import os
+          import requests
+          
+          # Create directories for Afrofuturistic research data
+          os.makedirs('/data/populations', exist_ok=True)
+          os.makedirs('/data/molecules', exist_ok=True)
+          os.makedirs('/data/traditional_medicine', exist_ok=True)
+          
+          print("🌍 Afrofuturistic research data structure initialized")
+          print("⚡ Ready for quantum analysis workflows")
+        volumeMounts:
+        - name: shared-data
+          mountPath: /data
+      volumes:
+      - name: shared-data
+        persistentVolumeClaim:
+          claimName: molecular-data-pvc
+      restartPolicy: OnFailure

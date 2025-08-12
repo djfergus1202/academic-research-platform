@@ -1,0 +1,150 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: afrofuturistic-jupyter-deployment
+  labels:
+    app: afrofuturistic-jupyter
+    component: notebook-server
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: afrofuturistic-jupyter
+      component: notebook-server
+  template:
+    metadata:
+      labels:
+        app: afrofuturistic-jupyter
+        component: notebook-server
+    spec:
+      containers:
+      - name: jupyter-notebook
+        image: jupyter/datascience-notebook:latest
+        ports:
+        - containerPort: 8888
+        env:
+        - name: JUPYTER_ENABLE_LAB
+          value: "yes"
+        - name: JUPYTER_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: jupyter-secret
+              key: token
+        - name: GRANT_SUDO
+          value: "yes"
+        - name: CHOWN_HOME
+          value: "yes"
+        - name: CHOWN_HOME_OPTS
+          value: "-R"
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+            nvidia.com/gpu: 0
+          limits:
+            memory: "8Gi"
+            cpu: "4000m"
+            nvidia.com/gpu: 1
+        volumeMounts:
+        - name: notebook-data
+          mountPath: /home/jovyan/work
+        - name: afrofuturistic-notebooks
+          mountPath: /home/jovyan/afrofuturistic
+        command:
+        - start-notebook.sh
+        args:
+        - --NotebookApp.token=''
+        - --NotebookApp.password=''
+        - --NotebookApp.allow_origin='*'
+        - --NotebookApp.base_url='/jupyter'
+        - --NotebookApp.ip='0.0.0.0'
+        - --NotebookApp.port=8888
+        - --NotebookApp.notebook_dir='/home/jovyan/work'
+      volumes:
+      - name: notebook-data
+        persistentVolumeClaim:
+          claimName: jupyter-data-pvc
+      - name: afrofuturistic-notebooks
+        configMap:
+          name: afrofuturistic-notebooks-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: afrofuturistic-jupyter-service
+  labels:
+    app: afrofuturistic-jupyter
+spec:
+  type: ClusterIP
+  ports:
+  - name: jupyter
+    port: 8888
+    targetPort: 8888
+    protocol: TCP
+  selector:
+    app: afrofuturistic-jupyter
+    component: notebook-server
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: jupyter-secret
+type: Opaque
+data:
+  token: YWZyb2Z1dHVyaXN0aWMtcmVzZWFyY2gtdG9rZW4=  # base64 encoded
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jupyter-data-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: fast-ssd
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: afrofuturistic-notebooks-config
+data:
+  afrofuturistic_research.ipynb: |
+    {
+     "cells": [
+      {
+       "cell_type": "markdown",
+       "metadata": {},
+       "source": [
+        "# 🌍 AFROFUTURISTIC RESEARCH NEXUS\n",
+        "## Advanced Computational Platform for Ancestral Knowledge & Future Science\n",
+        "\n",
+        "This notebook integrates traditional African knowledge systems with cutting-edge computational methods."
+       ]
+      },
+      {
+       "cell_type": "code",
+       "execution_count": null,
+       "metadata": {},
+       "source": [
+        "import numpy as np\n",
+        "import pandas as pd\n",
+        "import plotly.graph_objects as go\n",
+        "import plotly.express as px\n",
+        "\n",
+        "print('🌍 Afrofuturistic Research Environment Initialized')\n",
+        "print('⚡ Quantum modules loaded successfully')"
+       ]
+      }
+     ],
+     "metadata": {
+      "kernelspec": {
+       "display_name": "Python 3",
+       "language": "python",
+       "name": "python3"
+      }
+     },
+     "nbformat": 4,
+     "nbformat_minor": 4
+    }

@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: afrofuturistic-research-platform
+  labels:
+    app: afrofuturistic-research
+    tier: frontend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: afrofuturistic-research
+      tier: frontend
+  template:
+    metadata:
+      labels:
+        app: afrofuturistic-research
+        tier: frontend
+    spec:
+      containers:
+      - name: streamlit-app
+        image: afrofuturistic-research:latest
+        ports:
+        - containerPort: 5000
+        env:
+        - name: STREAMLIT_SERVER_PORT
+          value: "5000"
+        - name: STREAMLIT_SERVER_ADDRESS
+          value: "0.0.0.0"
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 5000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      - name: jupyter-lab
+        image: jupyter/datascience-notebook:latest
+        ports:
+        - containerPort: 8888
+        env:
+        - name: JUPYTER_ENABLE_LAB
+          value: "yes"
+        - name: JUPYTER_TOKEN
+          value: ""
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+        volumeMounts:
+        - name: notebook-storage
+          mountPath: /home/jovyan/work
+      volumes:
+      - name: notebook-storage
+        persistentVolumeClaim:
+          claimName: afrofuturistic-notebooks-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: afrofuturistic-research-service
+  labels:
+    app: afrofuturistic-research
+spec:
+  type: LoadBalancer
+  ports:
+  - name: streamlit
+    port: 80
+    targetPort: 5000
+    protocol: TCP
+  - name: jupyter
+    port: 8888
+    targetPort: 8888
+    protocol: TCP
+  selector:
+    app: afrofuturistic-research
+    tier: frontend
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: afrofuturistic-notebooks-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
